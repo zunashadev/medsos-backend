@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 
 export const RegisterUser = async (req, res) => {
   try {
-    // Validation Zod
+    // Validate request body
     const userSchema = z.object({
       fullname: z.string().min(6, "Fullname minimal 6 karakter"),
       username: z.string().min(6, "Username minimal 6 karakter"),
@@ -15,7 +15,7 @@ export const RegisterUser = async (req, res) => {
 
     const validated = userSchema.parse(req.body);
 
-    // cek email & username apakah sudah terdaftar
+    // Check email already exists
     const emailExisting = await prisma.user.findUnique({
       where: {
         email: validated.email,
@@ -24,10 +24,11 @@ export const RegisterUser = async (req, res) => {
 
     if (emailExisting) {
       return res.status(400).json({
-        message: "Email sudah terdaftar, silahkan gunakan email lain!",
+        message: "Email sudah terdaftar, silahkan gunakan email lain.",
       });
     }
 
+    // Check username already exists
     const usernameExisting = await prisma.user.findUnique({
       where: {
         username: validated.username,
@@ -36,15 +37,15 @@ export const RegisterUser = async (req, res) => {
 
     if (usernameExisting) {
       return res.status(400).json({
-        message: "Username sudah terdaftar, silahkan gunakan username lain!",
+        message: "Username sudah terdaftar, silahkan gunakan username lain.",
       });
     }
 
-    // Password Encryption
-    const salt = bcrypt.genSaltSync(10);
-    const hashedPassword = bcrypt.hashSync(validated.password, salt);
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(validated.password, salt);
 
-    // Insert Data to Database
+    // Create user in database
     const newUser = await prisma.user.create({
       data: {
         fullname: validated.fullname,
@@ -54,17 +55,14 @@ export const RegisterUser = async (req, res) => {
       },
     });
 
-    // Buat jwt simpan id user ke jwt
+    // Generate JWT token
     const jwtSecret = process.env.JWT_SECRET;
-    const token = jwt.sign(
-      {
-        id: newUser.id,
-      },
-      jwtSecret,
-      { expiresIn: "6d" },
-    );
 
-    // Res Success
+    if (!jwtSecret) throw new Error("JWT_SECRET belum dikonfigurasi");
+
+    const token = jwt.sign({ id: newUser.id }, jwtSecret, { expiresIn: "6d" });
+
+    // Send response success
     return res.status(201).json({
       message: "Register berhasil",
       data: {
@@ -78,21 +76,21 @@ export const RegisterUser = async (req, res) => {
       token: token,
     });
   } catch (err) {
-    if (err instanceof Error && "issues" in err) {
-      // zod
+    // Zod error
+    if (err instanceof z.ZodError) {
       const errors = err.issues.map((i) => i.message);
       return res.status(400).json({ message: errors });
     }
 
-    // express
-    console.log(err);
-    return res.status(500).json({ message: "Server Down" });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const LoginUser = async (req, res) => {
   try {
-    // VALIDATION
+    // Validate request body
     const loginSchema = z.object({
       email: z.email("Email harus berformat email (example@mail.com)."),
       password: z.string().min(1, "Password wajib diisi."),
@@ -100,7 +98,7 @@ export const LoginUser = async (req, res) => {
 
     const validated = loginSchema.parse(req.body);
 
-    // FIND USER BY EMAIL
+    // Check user existence
     const existingEmail = await prisma.user.findUnique({
       where: {
         email: validated.email,
@@ -108,35 +106,33 @@ export const LoginUser = async (req, res) => {
     });
 
     if (!existingEmail) {
-      return res.status(400).json({
+      return res.status(401).json({
         message: "Email belum terdaftar, silahkan register terlebih dahulu.",
       });
     }
 
-    // COMPARE PASSWORD REQ BODY & DATABASE
-    const comparePassword = bcrypt.compareSync(
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(
       validated.password,
       existingEmail.password,
     );
 
-    if (!comparePassword) {
+    if (!isPasswordValid) {
       return res.status(401).json({
         message: "Invalid user.",
       });
     }
 
-    // CREATE JWT TOKEN
+    // Generate JWT token
     const jwtSecret = process.env.JWT_SECRET;
 
-    const token = jwt.sign(
-      {
-        id: existingEmail.id,
-      },
-      jwtSecret,
-      { expiresIn: "6d" },
-    );
+    if (!jwtSecret) throw new Error("JWT_SECRET belum dikonfigurasi");
 
-    // SUCCESS RESPONSE
+    const token = jwt.sign({ id: existingEmail.id }, jwtSecret, {
+      expiresIn: "6d",
+    });
+
+    // Send response success
     return res.status(200).json({
       message: "Login berhasil",
       data: {
@@ -150,15 +146,15 @@ export const LoginUser = async (req, res) => {
       token: token,
     });
   } catch (err) {
-    if (err instanceof Error && "issues" in err) {
+    // Zod error
+    if (err instanceof z.ZodError) {
       const errors = err.issues.map((i) => i.message);
-
       return res.status(400).json({ message: errors });
     }
 
-    console.log(err);
-
-    return res.status(500).json({ message: "Server down." });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 

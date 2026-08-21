@@ -3,48 +3,60 @@ import { prisma } from "../lib/prisma.js";
 
 export const followUserAccount = async (req, res) => {
   try {
-    // Get Current User ID & Follow User ID
+    // Get current user ID
     const currentUserId = req.user.id;
-    const followUserId = Number(req.body.followUserId);
 
-    // check jika current user sama dengan followUserId
-    if (currentUserId === followUserId) {
+    // Get follow user ID
+    const followUserId = Number(req.params.userId);
+
+    // Validate request params
+    const followSchema = z.object({
+      followUserId: z.number().int().positive(),
+    });
+
+    const validated = followSchema.parse({ followUserId });
+
+    // Check if current user follows themselves
+    if (currentUserId === validated.followUserId) {
       return res
         .status(400)
-        .json({ message: "Tidak bisa follow akun sendiri" });
+        .json({ message: "Tidak bisa follow akun sendiri." });
     }
 
-    const otherUserId = await prisma.user.findUnique({
+    // Check target user
+    const targetUser = await prisma.user.findUnique({
       where: {
-        id: followUserId,
+        id: validated.followUserId,
       },
     });
 
-    if (!otherUserId) {
-      return res.status(404).json({ message: "User id tidak ditemukan" });
+    if (!targetUser) {
+      return res.status(404).json({ message: "User tidak ditemukan." });
     }
 
-    const isFollowUser = await prisma.follow.findUnique({
+    // Check existing folow
+    const existingFollow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
           followerId: currentUserId,
-          followingId: followUserId,
+          followingId: validated.followUserId,
         },
       },
     });
 
-    if (isFollowUser) {
-      return res.status(400).json({ message: "User sudah pernah di follow" });
+    if (existingFollow) {
+      return res.status(400).json({ message: "User sudah pernah di-follow." });
     }
 
+    // Create follow
     const follow = await prisma.follow.create({
       data: {
         followerId: currentUserId,
-        followingId: followUserId,
+        followingId: validated.followUserId,
       },
     });
 
-    // update user count
+    // Update current user's following count
     await prisma.user.update({
       where: {
         id: currentUserId,
@@ -56,9 +68,10 @@ export const followUserAccount = async (req, res) => {
       },
     });
 
+    // Update target user's follower count
     await prisma.user.update({
       where: {
-        id: followUserId,
+        id: validated.followUserId,
       },
       data: {
         followerCount: {
@@ -67,43 +80,81 @@ export const followUserAccount = async (req, res) => {
       },
     });
 
+    // Send response success
     return res
       .status(201)
-      .json({ message: "Follow User Berhasil", data: follow });
+      .json({ message: "Follow user berhasil.", data: follow });
   } catch (err) {
-    console.log(err);
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((i) => i.message);
+      return res.status(400).json({ message: errors });
+    }
 
-    return res.status(500).json({ message: "Server Down" });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const unfollowUserAccount = async (req, res) => {
-  const { unfollowUserId } = req.params;
-  const currentUserId = req.user.id;
-
-  const userUnfollow = await prisma.user.findUnique({
-    where: {
-      id: Number(unfollowUserId),
-    },
-  });
-
-  if (!userUnfollow) {
-    return res.status(404).json({ message: "User tidak ditemukan" });
-  }
-
   try {
-    await prisma.follow.delete({
+    // Get current user ID
+    const currentUserId = req.user.id;
+
+    // Get unfollow user ID
+    const unfollowUserId = Number(req.params.userId);
+
+    // Validate request params
+    const unfollowSchema = z.object({
+      unfollowUserId: z.number().int().positive(),
+    });
+
+    const validated = unfollowSchema.parse({ unfollowUserId });
+
+    // Check target user
+    const targetUser = await prisma.user.findUnique({
+      where: {
+        id: validated.unfollowUserId,
+      },
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({
+        message: "User tidak ditemukan.",
+      });
+    }
+
+    // Check existing follow
+    const existingFollow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
-          followerId: Number(currentUserId),
-          followingId: Number(unfollowUserId),
+          followerId: currentUserId,
+          followingId: validated.unfollowUserId,
         },
       },
     });
 
+    if (!existingFollow) {
+      return res.status(400).json({
+        message: "User belum di-follow.",
+      });
+    }
+
+    // Delete follow
+    await prisma.follow.delete({
+      where: {
+        followerId_followingId: {
+          followerId: currentUserId,
+          followingId: validated.unfollowUserId,
+        },
+      },
+    });
+
+    // Update current user's following count
     await prisma.user.update({
       where: {
-        id: Number(currentUserId),
+        id: currentUserId,
       },
       data: {
         followingCount: {
@@ -112,9 +163,10 @@ export const unfollowUserAccount = async (req, res) => {
       },
     });
 
+    // Update target user's follower count
     await prisma.user.update({
       where: {
-        id: Number(unfollowUserId),
+        id: validated.unfollowUserId,
       },
       data: {
         followerCount: {
@@ -123,14 +175,22 @@ export const unfollowUserAccount = async (req, res) => {
       },
     });
 
-    return res.status(200).json({ message: "User berhasil di unfollow" });
+    // Send response success
+    return res.status(200).json({ message: "User berhasil di-unfollow" });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((i) => i.message);
+      return res.status(400).json({ message: errors });
+    }
+
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
-export const getLimitUser = async (req, res) => {
+export const getSuggestedUsers = async (req, res) => {
   try {
     const currentUserId = req.user.id;
 
@@ -160,7 +220,7 @@ export const getLimitUser = async (req, res) => {
     });
 
     return res.status(200).json({
-      message: "5 user yang belum di follow",
+      message: `${users.length} user yang belum di-follow`,
       data: users,
     });
   } catch (err) {
@@ -172,11 +232,11 @@ export const getLimitUser = async (req, res) => {
 export const isFollowUser = async (req, res) => {
   try {
     const currentUserId = req.user.id;
-    const { followUserId } = req.params;
+    const { userId } = req.params;
 
     const checkFollowUserId = await prisma.user.findUnique({
       where: {
-        id: Number(followUserId),
+        id: Number(userId),
       },
     });
 
@@ -188,7 +248,7 @@ export const isFollowUser = async (req, res) => {
       where: {
         followerId_followingId: {
           followerId: currentUserId,
-          followingId: Number(followUserId),
+          followingId: Number(userId),
         },
       },
     });

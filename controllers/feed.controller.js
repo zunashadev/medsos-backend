@@ -1,4 +1,3 @@
-import { error } from "console";
 import cloudinary from "../lib/cloudinary.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -54,7 +53,9 @@ export const createFeed = async (req, res) => {
       },
     });
 
-    return res.status(201).json({ message: "Feed berhasil dibuat", data: newFeed });
+    return res
+      .status(201)
+      .json({ message: "Feed berhasil dibuat", data: newFeed });
   } catch (err) {
     console.log(err);
     return res.status(500).json({ message: "Server Down", error: err });
@@ -176,7 +177,9 @@ export const deleteFeed = async (req, res) => {
     }
 
     if (postData.userId != req.user.id) {
-      return res.status(400).json({ message: "Anda tidak bisa menghapus feed user lain" });
+      return res
+        .status(400)
+        .json({ message: "Anda tidak bisa menghapus feed user lain" });
     }
 
     if (postData.imageId) {
