@@ -48,36 +48,41 @@ export const followUserAccount = async (req, res) => {
       return res.status(400).json({ message: "User sudah pernah di-follow." });
     }
 
-    // Create follow
-    const follow = await prisma.follow.create({
-      data: {
-        followerId: currentUserId,
-        followingId: validated.followUserId,
-      },
-    });
-
-    // Update current user's following count
-    await prisma.user.update({
-      where: {
-        id: currentUserId,
-      },
-      data: {
-        followingCount: {
-          increment: 1,
+    // Follow Transaction
+    const follow = await prisma.$transaction(async (tx) => {
+      // Create follow
+      const follow = await tx.follow.create({
+        data: {
+          followerId: currentUserId,
+          followingId: validated.followUserId,
         },
-      },
-    });
+      });
 
-    // Update target user's follower count
-    await prisma.user.update({
-      where: {
-        id: validated.followUserId,
-      },
-      data: {
-        followerCount: {
-          increment: 1,
+      // Update current user's following count
+      await tx.user.update({
+        where: {
+          id: currentUserId,
         },
-      },
+        data: {
+          followingCount: {
+            increment: 1,
+          },
+        },
+      });
+
+      // Update target user's follower count
+      await tx.user.update({
+        where: {
+          id: validated.followUserId,
+        },
+        data: {
+          followerCount: {
+            increment: 1,
+          },
+        },
+      });
+
+      return follow;
     });
 
     // Send response success
@@ -141,38 +146,41 @@ export const unfollowUserAccount = async (req, res) => {
       });
     }
 
-    // Delete follow
-    await prisma.follow.delete({
-      where: {
-        followerId_followingId: {
-          followerId: currentUserId,
-          followingId: validated.unfollowUserId,
+    // Delete Transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete follow
+      await tx.follow.delete({
+        where: {
+          followerId_followingId: {
+            followerId: currentUserId,
+            followingId: validated.unfollowUserId,
+          },
         },
-      },
-    });
+      });
 
-    // Update current user's following count
-    await prisma.user.update({
-      where: {
-        id: currentUserId,
-      },
-      data: {
-        followingCount: {
-          decrement: 1,
+      // Update current user's following count
+      await tx.user.update({
+        where: {
+          id: currentUserId,
         },
-      },
-    });
+        data: {
+          followingCount: {
+            decrement: 1,
+          },
+        },
+      });
 
-    // Update target user's follower count
-    await prisma.user.update({
-      where: {
-        id: validated.unfollowUserId,
-      },
-      data: {
-        followerCount: {
-          decrement: 1,
+      // Update target user's follower count
+      await tx.user.update({
+        where: {
+          id: validated.unfollowUserId,
         },
-      },
+        data: {
+          followerCount: {
+            decrement: 1,
+          },
+        },
+      });
     });
 
     // Send response success
@@ -192,8 +200,10 @@ export const unfollowUserAccount = async (req, res) => {
 
 export const getSuggestedUsers = async (req, res) => {
   try {
+    // Get current user ID
     const currentUserId = req.user.id;
 
+    // Get list of followed user IDs
     const followedUser = await prisma.follow.findMany({
       where: { followerId: currentUserId },
       select: { followingId: true },
@@ -201,6 +211,7 @@ export const getSuggestedUsers = async (req, res) => {
 
     const followedIds = followedUser.map((f) => f.followingId);
 
+    // Fetch recommended users (exclude current user and already followed)
     const users = await prisma.user.findMany({
       where: {
         id: {
@@ -219,47 +230,56 @@ export const getSuggestedUsers = async (req, res) => {
       },
     });
 
+    // Send response success
     return res.status(200).json({
       message: `${users.length} user yang belum di-follow`,
       data: users,
     });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const isFollowUser = async (req, res) => {
   try {
+    // Get current user ID
     const currentUserId = req.user.id;
-    const { userId } = req.params;
 
+    // Get target user ID
+    const targetUserId = Number(req.params.userId);
+
+    // Check target user
     const checkFollowUserId = await prisma.user.findUnique({
       where: {
-        id: Number(userId),
+        id: targetUserId,
       },
     });
 
     if (!checkFollowUserId) {
-      return res.status(404).json({ message: "User tidak ditemukan" });
+      return res.status(404).json({ message: "User tidak ditemukan." });
     }
 
+    // Check follow status
     const isFollowUserData = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
           followerId: currentUserId,
-          followingId: Number(userId),
+          followingId: targetUserId,
         },
       },
     });
 
+    // Send response
     if (isFollowUserData) {
       return res.status(200).json({ data: true });
     }
 
     return res.status(200).json({ data: false });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
