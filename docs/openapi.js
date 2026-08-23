@@ -287,6 +287,8 @@ const openapiSpecification = {
 
             required: true,
 
+            description: "ID of the post to check like status",
+
             schema: {
               type: "integer",
 
@@ -302,6 +304,11 @@ const openapiSpecification = {
 
           404: {
             description: "Post not found.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
           },
 
           500: {
@@ -333,6 +340,8 @@ const openapiSpecification = {
 
             required: true,
 
+            description: "ID of the post to bookmark or unbookmark",
+
             schema: {
               type: "integer",
 
@@ -348,6 +357,11 @@ const openapiSpecification = {
 
           404: {
             description: "Post not found.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
           },
 
           500: {
@@ -360,6 +374,9 @@ const openapiSpecification = {
         tags: ["Bookmark"],
 
         summary: "Check bookmark status",
+
+        description:
+          "Check whether the authenticated user has bookmarked the post.",
 
         security: [
           {
@@ -374,6 +391,8 @@ const openapiSpecification = {
             in: "path",
 
             required: true,
+
+            description: "ID of the post to check bookmark status",
 
             schema: {
               type: "integer",
@@ -390,6 +409,11 @@ const openapiSpecification = {
 
           404: {
             description: "Post not found.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
           },
 
           500: {
@@ -527,7 +551,8 @@ const openapiSpecification = {
 
         summary: "Get user feed",
 
-        description: "Retrieve posts for the authenticated user's feed.",
+        description:
+          "Retrieve paginated posts from users the authenticated user follows, including their own posts.",
 
         security: [
           {
@@ -542,6 +567,8 @@ const openapiSpecification = {
             in: "query",
 
             required: false,
+
+            description: "Page number (starts from 1)",
 
             schema: {
               type: "integer",
@@ -559,12 +586,14 @@ const openapiSpecification = {
 
             required: false,
 
+            description: "Number of posts per page",
+
             schema: {
               type: "integer",
 
               minimum: 1,
 
-              default: 10,
+              default: 3,
             },
           },
         ],
@@ -579,14 +608,169 @@ const openapiSpecification = {
           },
         },
       },
+
+      post: {
+        tags: ["Feed"],
+
+        summary: "Create a new post",
+
+        description:
+          "Create a new post with a caption and an image. The image is uploaded to Cloudinary.",
+
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+
+        requestBody: {
+          required: true,
+
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+
+                required: ["caption", "image"],
+
+                properties: {
+                  caption: {
+                    type: "string",
+                    example: "Beautiful sunset!",
+                  },
+
+                  image: {
+                    type: "string",
+                    format: "binary",
+                    description: "Image file to upload",
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        responses: {
+          201: {
+            description: "Post created successfully.",
+          },
+
+          400: {
+            description: "Caption or image is missing.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
     },
-    "/api/auth/login": {
+
+    "/api/feed/{id}": {
+      get: {
+        tags: ["Feed"],
+
+        summary: "Get post detail",
+
+        description:
+          "Retrieve detail of a specific post including its comments.",
+
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+
+        parameters: [
+          {
+            name: "id",
+
+            in: "path",
+
+            required: true,
+
+            description: "ID of the post",
+
+            schema: {
+              type: "integer",
+              example: 5,
+            },
+          },
+        ],
+
+        responses: {
+          200: {
+            description: "Post detail retrieved successfully.",
+          },
+
+          404: {
+            description: "Post not found.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+
+      delete: {
+        tags: ["Feed"],
+
+        summary: "Delete a post",
+
+        description:
+          "Delete a post owned by the authenticated user. The associated image will also be deleted from Cloudinary.",
+
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+
+        parameters: [
+          {
+            name: "id",
+
+            in: "path",
+
+            required: true,
+
+            description: "ID of the post to delete",
+
+            schema: {
+              type: "integer",
+              example: 5,
+            },
+          },
+        ],
+
+        responses: {
+          200: {
+            description: "Post deleted successfully.",
+          },
+
+          400: {
+            description: "Authenticated user is not the owner of the post.",
+          },
+
+          404: {
+            description: "Post not found.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+    "/api/auth/register": {
       post: {
         tags: ["Authentication"],
 
-        summary: "Login user",
+        summary: "Register user",
 
-        description: "Authenticate a user and return an authentication token.",
+        description:
+          "Register a new user account and return an authentication token.",
 
         requestBody: {
           required: true,
@@ -596,20 +780,84 @@ const openapiSpecification = {
               schema: {
                 type: "object",
 
-                required: ["username", "password"],
+                required: ["fullname", "username", "email", "password"],
 
                 properties: {
+                  fullname: {
+                    type: "string",
+                    minLength: 6,
+                    example: "John Doe",
+                  },
+
                   username: {
                     type: "string",
+                    minLength: 6,
+                    example: "johndoe",
+                  },
 
-                    example: "john",
+                  email: {
+                    type: "string",
+                    format: "email",
+                    example: "john@example.com",
                   },
 
                   password: {
                     type: "string",
-
                     format: "password",
+                    minLength: 8,
+                    example: "password123",
+                  },
+                },
+              },
+            },
+          },
+        },
 
+        responses: {
+          201: {
+            description: "User registered successfully.",
+          },
+
+          400: {
+            description: "Validation error or email/username already exists.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+
+    "/api/auth/login": {
+      post: {
+        tags: ["Authentication"],
+
+        summary: "Login user",
+
+        description:
+          "Authenticate a user using email and password, then return an authentication token.",
+
+        requestBody: {
+          required: true,
+
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+
+                required: ["email", "password"],
+
+                properties: {
+                  email: {
+                    type: "string",
+                    format: "email",
+                    example: "john@example.com",
+                  },
+
+                  password: {
+                    type: "string",
+                    format: "password",
                     example: "password123",
                   },
                 },
@@ -624,7 +872,243 @@ const openapiSpecification = {
           },
 
           400: {
-            description: "Invalid credentials or request.",
+            description: "Validation error (invalid request body).",
+          },
+
+          401: {
+            description: "Email not registered or incorrect password.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+
+    "/api/auth/me": {
+      get: {
+        tags: ["Authentication"],
+
+        summary: "Get authenticated user",
+
+        description:
+          "Retrieve the profile data of the currently authenticated user based on the Bearer token.",
+
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+
+        responses: {
+          200: {
+            description: "Authenticated user data retrieved successfully.",
+          },
+
+          401: {
+            description: "Unauthorized. Token is missing or invalid.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+    "/api/user/search": {
+      get: {
+        tags: ["User"],
+
+        summary: "Search users by username",
+
+        description:
+          "Search for users whose username matches the given query string (case-insensitive, partial match).",
+
+        parameters: [
+          {
+            name: "username",
+
+            in: "query",
+
+            required: true,
+
+            description: "Partial or full username to search for",
+
+            schema: {
+              type: "string",
+              example: "john",
+            },
+          },
+        ],
+
+        responses: {
+          200: {
+            description: "Users found successfully.",
+          },
+
+          404: {
+            description: "No users found with the given username.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+
+    "/api/user/{username}": {
+      get: {
+        tags: ["User"],
+
+        summary: "Get user by username",
+
+        description:
+          "Retrieve a user's profile data, posts, and bookmarks by their username.",
+
+        parameters: [
+          {
+            name: "username",
+
+            in: "path",
+
+            required: true,
+
+            description: "The username of the target user",
+
+            schema: {
+              type: "string",
+              example: "johndoe",
+            },
+          },
+        ],
+
+        responses: {
+          200: {
+            description: "User profile retrieved successfully.",
+          },
+
+          404: {
+            description: "User not found.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+
+    "/api/user/update-user": {
+      put: {
+        tags: ["User"],
+
+        summary: "Update user profile",
+
+        description:
+          "Update the authenticated user's fullname, username, and bio.",
+
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+
+        requestBody: {
+          required: true,
+
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+
+                required: ["fullname", "username", "bio"],
+
+                properties: {
+                  fullname: {
+                    type: "string",
+                    minLength: 6,
+                    example: "John Doe",
+                  },
+
+                  username: {
+                    type: "string",
+                    minLength: 6,
+                    example: "johndoe",
+                  },
+
+                  bio: {
+                    type: "string",
+                    minLength: 10,
+                    example: "Software engineer who loves coding.",
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        responses: {
+          200: {
+            description: "User profile updated successfully.",
+          },
+
+          400: {
+            description: "Validation error or username already taken.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+
+    "/api/user/update-photo-profile": {
+      put: {
+        tags: ["User"],
+
+        summary: "Update profile photo",
+
+        description:
+          "Upload a new profile photo for the authenticated user. The old photo will be deleted from Cloudinary automatically.",
+
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+
+        requestBody: {
+          required: true,
+
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+
+                required: ["image"],
+
+                properties: {
+                  image: {
+                    type: "string",
+                    format: "binary",
+                    description: "Profile image file to upload",
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        responses: {
+          200: {
+            description: "Profile photo updated successfully.",
+          },
+
+          400: {
+            description: "No image file provided.",
           },
 
           500: {
