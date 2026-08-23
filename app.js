@@ -4,7 +4,7 @@ import express from "express";
 import "dotenv/config";
 import cors from "cors";
 
-import swaggerUi from "swagger-ui-express";
+import { apiReference } from "@scalar/express-api-reference";
 import openapiSpecification from "./docs/openapi.js";
 
 import AuthRouter from "./routes/auth.route.js";
@@ -28,7 +28,16 @@ app.use("/api/comment", CommentRouter);
 app.use("/api/like", LikeRouter);
 app.use("/api/bookmark", BookmarkRouter);
 
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiSpecification));
+// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiSpecification));
+
+app.use(
+  "/api-docs",
+  apiReference({
+    spec: {
+      content: openapiSpecification,
+    },
+  }),
+);
 
 app.get("/", (req, res) => {
   res.json({
