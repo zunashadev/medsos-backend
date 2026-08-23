@@ -3,6 +3,10 @@
 import express from "express";
 import "dotenv/config";
 import cors from "cors";
+
+import swaggerUi from "swagger-ui-express";
+import openapiSpecification from "./docs/openapi.js";
+
 import AuthRouter from "./routes/auth.route.js";
 import UserRouter from "./routes/user.route.js";
 import FollowRouter from "./routes/follow.route.js";
@@ -23,6 +27,8 @@ app.use("/api/feed", FeedRouter);
 app.use("/api/comment", CommentRouter);
 app.use("/api/like", LikeRouter);
 app.use("/api/bookmark", BookmarkRouter);
+
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiSpecification));
 
 app.get("/", (req, res) => {
   res.json({
