@@ -4,44 +4,73 @@ import { prisma } from "../lib/prisma.js";
 export const AuthMiddleware = async (req, res, next) => {
   const jwtSecret = process.env.JWT_SECRET;
 
-  try {
-    const headers = req.headers.authorization;
+  if (!jwtSecret) {
+    console.error("JWT_SECRET is not configured.");
+    return res.status(500).json({ message: "Internal server error." });
+  }
 
-    if (!headers) {
-      return res.status(401).json({
-        message: "Authorization error, token belum diinput",
-      });
+  try {
+    const authorization = req.headers.authorization;
+
+    if (!authorization) {
+      return res
+        .status(401)
+        .json({ message: "Authorization header is required." });
     }
 
-    const token = headers.split("Bearer ")[1];
+    // Pastikan formatnya: Bearer <token>
+    const [scheme, token] = authorization.split(" ");
+
+    if (scheme !== "Bearer" || !token) {
+      return res.status(401).json({ message: "Invalid authorization format." });
+    }
+
+    // Verifikasi JWT
     const decoded = jwt.verify(token, jwtSecret);
 
+    // Pastikan payload memiliki ID user
+    if (typeof decoded !== "object" || !decoded.id) {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+
+    // Cari user berdasarkan ID dari token
     const currentUser = await prisma.user.findUnique({
       where: {
         id: decoded.id,
+      },
+      select: {
+        id: true,
+        fullname: true,
+        username: true,
+        email: true,
+        image: true,
+        bio: true,
       },
     });
 
     if (!currentUser) {
       return res.status(401).json({
-        message: "User tidak ditemukan",
+        message: "User not found.",
       });
     }
 
-    // menambah user ke req
-    req.user = {
-      id: currentUser.id,
-      fullname: currentUser.fullname,
-      username: currentUser.username,
-      email: currentUser.email,
-      image: currentUser.image,
-      bio: currentUser.bio,
-    };
+    // Menambah user ke req
+    req.user = currentUser;
 
     next();
   } catch (err) {
-    res.status(500).json({
-      message: "Server Down",
+    // JWT invalid
+    if (err instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({
+        message: "Invalid or expired token.",
+      });
+    }
+
+    // Error lainnya
+    console.error("Auth middleware error:", err);
+
+    return res.status(500).json({
+      message: "Internal server error.",
     });
   }
 };
