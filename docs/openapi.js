@@ -593,6 +593,8 @@ const openapiSpecification = {
 
               minimum: 1,
 
+              maximum: 50,
+
               default: 3,
             },
           },
@@ -601,6 +603,10 @@ const openapiSpecification = {
         responses: {
           200: {
             description: "Feed retrieved successfully.",
+          },
+
+          400: {
+            description: "Validation error (invalid pagination parameters).",
           },
 
           500: {
@@ -636,6 +642,8 @@ const openapiSpecification = {
                 properties: {
                   caption: {
                     type: "string",
+                    minLength: 1,
+                    maxLength: 500,
                     example: "Beautiful sunset!",
                   },
 
@@ -749,7 +757,7 @@ const openapiSpecification = {
             description: "Post deleted successfully.",
           },
 
-          400: {
+          403: {
             description: "Authenticated user is not the owner of the post.",
           },
 
