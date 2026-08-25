@@ -113,9 +113,6 @@ npm install
 Buat file `.env` di direktori root project, lalu lengkapi variabel berikut:
 
 ```env
-# Server Config
-PORT=3000
-
 # Database Config (PostgreSQL / Neon / Supabase)
 DATABASE_URL="postgresql://username:password@localhost:5432/medsos_db?schema=public"
 
