@@ -2,23 +2,35 @@ import cloudinary from "../lib/cloudinary.js";
 import { prisma } from "../lib/prisma.js";
 
 export const createFeed = async (req, res) => {
+  let uploadedImage = null;
+
   try {
-    const { caption } = req.body;
+    // Get current user ID
     const currentUserId = req.user.id;
 
-    // Validation
-    if (!caption) {
-      return res.status(400).json({ message: "Caption wajib diisi" });
-    }
+    // Get body request
+    const { caption } = req.body;
 
+    // Validate request body
+    const bodySchema = z.object({
+      caption: z
+        .string()
+        .trim()
+        .min(1, "Caption wajib diisi.")
+        .max(500, "Caption maksimal 500 karakter."),
+    });
+
+    const validated = bodySchema.parse({ caption });
+
+    // Validate upload file
     if (!req.file) {
-      return res.status(400).json({ message: "File gambar belum diinput" });
+      return res.status(400).json({ message: "File gambar belum diinput." });
     }
 
-    // Upload gambar dengan buffer multer
+    // Upload image to Cloudinary
     const fileStr = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
 
-    const result = await cloudinary.uploader.upload(fileStr, {
+    uploadedImage = await cloudinary.uploader.upload(fileStr, {
       folder: "medsos/feed",
       transformation: [
         {
@@ -33,39 +45,75 @@ export const createFeed = async (req, res) => {
       ],
     });
 
-    // Insert data
-    const newFeed = await prisma.post.create({
-      data: {
-        caption,
-        image: result.secure_url,
-        imageId: result.public_id,
-        userId: currentUserId,
-      },
-    });
+    // Create post and update user's post count
+    const newFeed = await prisma.$transaction(async (tx) => {
+      const post = await tx.post.create({
+        data: {
+          caption: validated.caption,
+          image: uploadedImage.secure_url,
+          imageId: uploadedImage.public_id,
+          userId: currentUserId,
+        },
+      });
 
-    // Update data user
-    await prisma.user.update({
-      where: {
-        id: Number(currentUserId),
-      },
-      data: {
-        postCount: { increment: 1 },
-      },
+      // Update data user
+      await tx.user.update({
+        where: {
+          id: currentUserId,
+        },
+        data: {
+          postCount: { increment: 1 },
+        },
+      });
+
+      return post;
     });
 
     return res
       .status(201)
-      .json({ message: "Feed berhasil dibuat", data: newFeed });
+      .json({ message: "Feed berhasil dibuat.", data: newFeed });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((i) => i.message);
+      return res.status(400).json({ message: errors });
+    }
+
+    if (uploadedImage?.public_id) {
+      try {
+        await cloudinary.uploader.destroy(uploadedImage.public_id);
+      } catch (cloudinaryError) {
+        console.error("Failed to rollback Cloudinary upload:", cloudinaryError);
+      }
+    }
+
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const readAllFeed = async (req, res) => {
   try {
+    // Get current user ID
     const currentUserId = req.user.id;
 
+    // Get query params
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 3;
+
+    // Validate pagination
+    const paginationSchema = z.object({
+      page: z.number().int().positive(),
+      limit: z.number().int().positive().max(50),
+    });
+
+    const validated = paginationSchema.parse({
+      page,
+      limit,
+    });
+
+    // Get users that current user follows
     const followings = await prisma.follow.findMany({
       where: { followerId: currentUserId },
       select: { followingId: true },
@@ -73,15 +121,15 @@ export const readAllFeed = async (req, res) => {
 
     const followingIds = followings.map((f) => f.followingId);
 
-    // Query Request
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 3;
-    const skip = (page - 1) * limit;
+    // Calculate pagination
+    const skip = (validated.page - 1) * validated.limit;
 
+    // Get total feed count
     const totalFeed = await prisma.post.count({
       where: { userId: { in: [...followingIds, currentUserId] } },
     });
 
+    // Get post
     const posts = await prisma.post.findMany({
       where: {
         userId: { in: [...followingIds, currentUserId] },
@@ -98,31 +146,41 @@ export const readAllFeed = async (req, res) => {
       },
       orderBy: { createdAt: "desc" },
       skip: skip,
-      take: limit,
+      take: validated.limit,
     });
 
-    const totalPage = Math.ceil(totalFeed / limit);
+    // Calculate total pages
+    const totalPage = Math.ceil(totalFeed / validated.limit);
 
     return res.status(200).json({
-      message: "Get all posts",
-      page,
-      limit,
+      message: "Get all posts.",
+      page: validated.page,
+      limit: validated.limit,
       totalPage,
       totalFeed,
       data: posts,
     });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((i) => i.message);
+      return res.status(400).json({ message: errors });
+    }
+
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const detailFeed = async (req, res) => {
-  const { id } = req.params;
-
   try {
+    // Get post ID
+    const postId = Number(req.params.id);
+
+    // Get post detail
     const post = await prisma.post.findUnique({
-      where: { id: Number(id) },
+      where: { id: postId },
       include: {
         user: {
           select: {
@@ -152,49 +210,76 @@ export const detailFeed = async (req, res) => {
     });
 
     if (!post) {
-      return res.status(404).json({ message: "Post tidak ditemukan" });
+      return res.status(404).json({ message: "Post tidak ditemukan." });
     }
 
-    return res.status(200).json({ message: "Get Detail Feed", data: post });
+    return res.status(200).json({ message: "Get detail feed.", data: post });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const deleteFeed = async (req, res) => {
-  const { id } = req.params;
-
   try {
+    // Get post ID
+    const postId = Number(req.params.id);
+
+    // Get post data
     const postData = await prisma.post.findUnique({
       where: {
-        id: Number(id),
+        id: postId,
       },
     });
 
     if (!postData) {
-      return res.status(404).json({ message: "Feed tidak ditemukan" });
+      return res.status(404).json({ message: "Post tidak ditemukan." });
     }
 
-    if (postData.userId != req.user.id) {
+    // Check post Ownership
+    if (postData.userId !== req.user.id) {
       return res
-        .status(400)
-        .json({ message: "Anda tidak bisa menghapus feed user lain" });
+        .status(403)
+        .json({ message: "Anda tidak bisa menghapus feed user lain." });
     }
 
-    if (postData.imageId) {
-      await cloudinary.uploader.destroy(postData.imageId);
-    }
+    // Delete post and update user's post count
+    await prisma.$transaction(async (tx) => {
+      await tx.post.delete({
+        where: {
+          id: postData.id,
+        },
+      });
 
-    await prisma.post.delete({
-      where: {
-        id: Number(id),
-      },
+      await tx.user.update({
+        where: {
+          id: postData.userId,
+        },
+        data: {
+          postCount: {
+            decrement: 1,
+          },
+        },
+      });
     });
 
-    return res.status(200).json({ message: "Data feed berhasil dihapus" });
+    // Delete image from Cloudinary
+    if (postData.imageId) {
+      try {
+        await cloudinary.uploader.destroy(postData.imageId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete image from Cloudinary:",
+          cloudinaryError,
+        );
+      }
+    }
+
+    return res.status(200).json({ message: "Post berhasil dihapus." });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
