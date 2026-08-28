@@ -3,12 +3,21 @@ import { prisma } from "../lib/prisma.js";
 import cloudinary from "../lib/cloudinary.js";
 
 export const getUserByUsername = async (req, res) => {
-  const { username } = req.params;
-
   try {
+    // Get username by params
+    const { username } = req.params;
+
+    // Validate username
+    const usernameSchema = z.object({
+      username: z.string().trim().min(6, "Username minimal 6 karakter."),
+    });
+
+    const validated = usernameSchema.parse({ username });
+
+    // Get user data
     const user = await prisma.user.findUnique({
       where: {
-        username,
+        username: validated.username,
       },
       omit: {
         password: true,
@@ -35,75 +44,118 @@ export const getUserByUsername = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: "Username tidak ditemukan" });
+      return res.status(404).json({ message: "Username tidak ditemukan." });
     }
 
-    return res.status(200).json({ message: "Detail User", data: user });
+    // Send response success
+    return res.status(200).json({ message: "Detail User.", data: user });
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server Down", error: err });
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((i) => i.message);
+      return res.status(400).json({ message: errors });
+    }
+
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const getSearchUser = async (req, res) => {
-  const { username } = req.query;
+  try {
+    // Get query params
+    const { username } = req.query;
 
-  if (!username) {
-    return res
-      .status(404)
-      .json({ message: "Parameter query username belum diisi" });
-  }
+    // Validate query params
+    const searchSchema = z.object({
+      username: z.string().trim().min(1, "Username harus diisi."),
+    });
 
-  const users = await prisma.user.findMany({
-    where: {
-      username: {
-        contains: username,
-        mode: "insensitive",
+    const validated = searchSchema.parse({ username });
+
+    // Search users
+    const users = await prisma.user.findMany({
+      where: {
+        username: {
+          contains: validated.username,
+          mode: "insensitive",
+        },
       },
-    },
-    select: {
-      id: true,
-      username: true,
-      fullname: true,
-      image: true,
-    },
-  });
+      select: {
+        id: true,
+        username: true,
+        fullname: true,
+        image: true,
+      },
+      orderBy: {
+        username: "asc",
+      },
+      take: 20,
+    });
 
-  if (users.length === 0) {
-    return res.status(404).json({ message: "Username tidak ditemukan" });
+    if (users.length === 0) {
+      return res.status(404).json({ message: "Username tidak ditemukan." });
+    }
+
+    // Send response success
+    return res.status(200).json({ message: "Search User.", data: users });
+  } catch (err) {
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((i) => i.message);
+      return res.status(400).json({ message: errors });
+    }
+
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
-
-  return res.status(200).json({ message: "Search User", data: users });
 };
 
 export const updateUser = async (req, res) => {
   try {
-    // Validation dengan Zod
+    // Get current user by ID
+    const currentUserId = req.user.id;
+
+    // Validate request body
     const userSchema = z.object({
-      fullname: z.string().min(6, "Fullname minimal 6 karakter"),
-      username: z.string().min(6, "Username minimal 6 karakter"),
-      bio: z.string().min(10, "Biodata minimal 10 karakter"),
+      fullname: z
+        .string()
+        .trim()
+        .min(6, "Fullname minimal 6 karakter.")
+        .max(100, "Fullname maksimal 100 karakter."),
+      username: z
+        .string()
+        .trim()
+        .min(6, "Username minimal 6 karakter.")
+        .max(30, "Username maksimal 30 karakter."),
+      bio: z
+        .string()
+        .trim()
+        .min(10, "Biodata minimal 10 karakter.")
+        .max(500, "Biodata maksimal 500 karakter."),
     });
 
     const validated = userSchema.parse(req.body);
 
-    // Validation untuk username
-    const currentUser = await prisma.user.findUnique({
+    // Check username availability
+    const existingUser = await prisma.user.findUnique({
       where: {
         username: validated.username,
       },
     });
 
-    if (currentUser && currentUser.id !== req.user.id) {
+    if (existingUser && existingUser.id !== currentUserId) {
       return res.status(400).json({
-        message: "Username sudah digunakan, silahkan gunakan username lain",
+        message: "Username sudah digunakan, silahkan gunakan username lain.",
       });
     }
 
-    // Update User berdasarkan req user id
-    const updateUser = await prisma.user.update({
+    // Update user
+    const updatedUser = await prisma.user.update({
       where: {
-        id: req.user.id,
+        id: currentUserId,
       },
       data: {
         bio: validated.bio,
@@ -115,48 +167,47 @@ export const updateUser = async (req, res) => {
       },
     });
 
-    // Success Response
+    // Send success Response
     return res
       .status(200)
-      .json({ message: "Update User Berhasil", data: updateUser });
+      .json({ message: "Update user berhasil.", data: updatedUser });
   } catch (err) {
-    if (err instanceof Error && "issues" in err) {
-      // zod
+    // Zod error
+    if (err instanceof z.ZodError) {
       const errors = err.issues.map((i) => i.message);
       return res.status(400).json({ message: errors });
     }
 
-    // express
-    console.log(err);
-    return res.status(500).json({ message: "Server Down" });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 export const updateAvatar = async (req, res) => {
+  let uploadedImage = null;
+
   try {
-    // Validation file
+    // Validate upload file
     if (!req.file) {
-      return res
-        .status(400)
-        .json({ message: "Belum ada gambar yang diinputkan" });
+      return res.status(400).json({ message: "File gambar wajib diinput." });
     }
 
-    // Get current user dari req user id
+    // Get current user
     const currentUser = await prisma.user.findUnique({
       where: {
         id: req.user.id,
       },
     });
 
-    // Validation 2 - Kita buat fungsi untuk hapus gambar lama
-    if (currentUser.imageId) {
-      await cloudinary.uploader.destroy(currentUser.imageId);
+    if (!currentUser) {
+      return res.status(404).json({ message: "User tidak ditemukan." });
     }
 
-    // Upload gambar dengan buffer multer
+    // Upload new avatar to Cloudinary
     const fileStr = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
 
-    const result = await cloudinary.uploader.upload(fileStr, {
+    uploadedImage = await cloudinary.uploader.upload(fileStr, {
       folder: "medsos/avatar",
       transformation: [
         {
@@ -166,30 +217,48 @@ export const updateAvatar = async (req, res) => {
       ],
     });
 
-    // Update user image dan image id di database table user
-    const updateUser = await prisma.user.update({
+    // Update user avatar in database
+    const updatedUser = await prisma.user.update({
       where: {
-        id: req.user.id,
+        id: currentUser.id,
       },
       data: {
-        image: result.secure_url,
-        imageId: result.public_id,
+        image: uploadedImage.secure_url,
+        imageId: uploadedImage.public_id,
       },
       omit: {
         password: true,
       },
     });
 
-    // Res success
+    // Delete old avatar from Cloudinary
+    if (currentUser.imageId) {
+      try {
+        await cloudinary.uploader.destroy(currentUser.imageId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete old avatar from Cloudinary:",
+          cloudinaryError,
+        );
+      }
+    }
+
+    // Send success response
     return res
       .status(200)
-      .json({ message: "Update Photo Profile Berhasil", data: updateUser });
+      .json({ message: "Update photo profile berhasil.", data: updatedUser });
   } catch (err) {
-    console.log(err);
+    // Rollback uploaded image if database update fails
+    if (uploadedImage?.public_id) {
+      try {
+        await cloudinary.uploader.destroy(uploadedImage.public_id);
+      } catch (cloudinaryError) {
+        console.error("Failed to rollback uploaded avatar:", cloudinaryError);
+      }
+    }
 
-    return res.status(500).json({
-      message: "Server Down",
-      error: err,
-    });
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };

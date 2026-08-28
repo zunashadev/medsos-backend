@@ -955,6 +955,10 @@ const openapiSpecification = {
             description: "Users found successfully.",
           },
 
+          400: {
+            description: "Validation error (invalid query parameter).",
+          },
+
           404: {
             description: "No users found with the given username.",
           },
@@ -997,6 +1001,10 @@ const openapiSpecification = {
             description: "User profile retrieved successfully.",
           },
 
+          400: {
+            description: "Validation error (invalid username parameter).",
+          },
+
           404: {
             description: "User not found.",
           },
@@ -1037,18 +1045,21 @@ const openapiSpecification = {
                   fullname: {
                     type: "string",
                     minLength: 6,
+                    maxLength: 100,
                     example: "John Doe",
                   },
 
                   username: {
                     type: "string",
                     minLength: 6,
+                    maxLength: 30,
                     example: "johndoe",
                   },
 
                   bio: {
                     type: "string",
                     minLength: 10,
+                    maxLength: 500,
                     example: "Software engineer who loves coding.",
                   },
                 },
@@ -1117,6 +1128,10 @@ const openapiSpecification = {
 
           400: {
             description: "No image file provided.",
+          },
+
+          404: {
+            description: "User not found.",
           },
 
           500: {
