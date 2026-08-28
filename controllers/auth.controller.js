@@ -7,10 +7,18 @@ export const RegisterUser = async (req, res) => {
   try {
     // Validate request body
     const userSchema = z.object({
-      fullname: z.string().min(6, "Fullname minimal 6 karakter"),
-      username: z.string().min(6, "Username minimal 6 karakter"),
-      email: z.email("Email harus berformat email (example@mail.com)"),
-      password: z.string().min(8, "Password minimal 8 karakter"),
+      fullname: z
+        .string()
+        .trim()
+        .min(6, "Fullname minimal 6 karakter.")
+        .max(100, "Fullname maksimal 100 karakter."),
+      username: z
+        .string()
+        .trim()
+        .min(6, "Username minimal 6 karakter.")
+        .max(30, "Username maksimal 30 karakter."),
+      email: z.email("Email harus berformat email (example@mail.com).").trim(),
+      password: z.string().min(8, "Password minimal 8 karakter."),
     });
 
     const validated = userSchema.parse(req.body);
@@ -23,7 +31,7 @@ export const RegisterUser = async (req, res) => {
     });
 
     if (emailExisting) {
-      return res.status(400).json({
+      return res.status(409).json({
         message: "Email sudah terdaftar, silahkan gunakan email lain.",
       });
     }
@@ -36,7 +44,7 @@ export const RegisterUser = async (req, res) => {
     });
 
     if (usernameExisting) {
-      return res.status(400).json({
+      return res.status(409).json({
         message: "Username sudah terdaftar, silahkan gunakan username lain.",
       });
     }
@@ -92,7 +100,7 @@ export const LoginUser = async (req, res) => {
   try {
     // Validate request body
     const loginSchema = z.object({
-      email: z.email("Email harus berformat email (example@mail.com)."),
+      email: z.email("Email harus berformat email (example@mail.com).").trim(),
       password: z.string().min(1, "Password wajib diisi."),
     });
 

@@ -794,12 +794,14 @@ const openapiSpecification = {
                   fullname: {
                     type: "string",
                     minLength: 6,
+                    maxLength: 100,
                     example: "John Doe",
                   },
 
                   username: {
                     type: "string",
                     minLength: 6,
+                    maxLength: 30,
                     example: "johndoe",
                   },
 
@@ -827,7 +829,11 @@ const openapiSpecification = {
           },
 
           400: {
-            description: "Validation error or email/username already exists.",
+            description: "Validation error (invalid request body).",
+          },
+
+          409: {
+            description: "Email or username already exists.",
           },
 
           500: {
