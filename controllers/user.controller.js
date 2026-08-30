@@ -4,20 +4,21 @@ import cloudinary from "../lib/cloudinary.js";
 
 export const getUserByUsername = async (req, res) => {
   try {
-    // Get username by params
-    const { username } = req.params;
-
-    // Validate username
-    const usernameSchema = z.object({
-      username: z.string().trim().min(6, "Username minimal 6 karakter."),
+    // Validate request params
+    const getUserByUsernameParamsSchema = z.object({
+      username: z
+        .string()
+        .trim()
+        .min(6, "Username minimal 6 karakter.")
+        .max(30, "Username maksimal 30 karakter."),
     });
 
-    const validated = usernameSchema.parse({ username });
+    const validatedParams = getUserByUsernameParamsSchema.parse(req.params);
 
     // Get user data
     const user = await prisma.user.findUnique({
       where: {
-        username: validated.username,
+        username: validatedParams.username,
       },
       omit: {
         password: true,
@@ -52,7 +53,7 @@ export const getUserByUsername = async (req, res) => {
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -64,21 +65,18 @@ export const getUserByUsername = async (req, res) => {
 
 export const getSearchUser = async (req, res) => {
   try {
-    // Get query params
-    const { username } = req.query;
-
-    // Validate query params
-    const searchSchema = z.object({
+    // Validate request query
+    const getSearchUserQuerySchema = z.object({
       username: z.string().trim().min(1, "Username harus diisi."),
     });
 
-    const validated = searchSchema.parse({ username });
+    const validatedQuery = getSearchUserQuerySchema.parse(req.query);
 
     // Search users
     const users = await prisma.user.findMany({
       where: {
         username: {
-          contains: validated.username,
+          contains: validatedQuery.username,
           mode: "insensitive",
         },
       },
@@ -98,12 +96,12 @@ export const getSearchUser = async (req, res) => {
       return res.status(404).json({ message: "Username tidak ditemukan." });
     }
 
-    // Send response success
-    return res.status(200).json({ message: "Search User.", data: users });
+    // Send success response
+    return res.status(200).json({ message: "Search user.", data: users });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -115,11 +113,11 @@ export const getSearchUser = async (req, res) => {
 
 export const updateUser = async (req, res) => {
   try {
-    // Get current user by ID
+    // Get current user ID
     const currentUserId = req.user.id;
 
     // Validate request body
-    const userSchema = z.object({
+    const updateUserBodySchema = z.object({
       fullname: z
         .string()
         .trim()
@@ -137,17 +135,17 @@ export const updateUser = async (req, res) => {
         .max(500, "Biodata maksimal 500 karakter."),
     });
 
-    const validated = userSchema.parse(req.body);
+    const validatedBody = updateUserBodySchema.parse(req.body);
 
     // Check username availability
-    const existingUser = await prisma.user.findUnique({
+    const existingUserByUsername = await prisma.user.findUnique({
       where: {
-        username: validated.username,
+        username: validatedBody.username,
       },
     });
 
-    if (existingUser && existingUser.id !== currentUserId) {
-      return res.status(400).json({
+    if (existingUserByUsername && existingUserByUsername.id !== currentUserId) {
+      return res.status(409).json({
         message: "Username sudah digunakan, silahkan gunakan username lain.",
       });
     }
@@ -158,23 +156,24 @@ export const updateUser = async (req, res) => {
         id: currentUserId,
       },
       data: {
-        bio: validated.bio,
-        username: validated.username,
-        fullname: validated.fullname,
+        bio: validatedBody.bio,
+        username: validatedBody.username,
+        fullname: validatedBody.fullname,
       },
       omit: {
         password: true,
       },
     });
 
-    // Send success Response
-    return res
-      .status(200)
-      .json({ message: "Update user berhasil.", data: updatedUser });
+    // Send success response
+    return res.status(200).json({
+      message: "Update user berhasil.",
+      data: updatedUser,
+    });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -188,7 +187,7 @@ export const updateAvatar = async (req, res) => {
   let uploadedImage = null;
 
   try {
-    // Validate upload file
+    // Validate uploaded file
     if (!req.file) {
       return res.status(400).json({ message: "File gambar wajib diinput." });
     }

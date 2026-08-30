@@ -6,20 +6,17 @@ export const toggleSaveFeed = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get post ID
-    const postId = Number(req.params.postId);
-
-    // Validation request params
-    const bookmarkSchema = z.object({
-      postId: z.number().int().positive(),
+    // Validate request params
+    const toggleSaveFeedParamsSchema = z.object({
+      postId: z.coerce.number().int().positive("Post ID harus valid."),
     });
 
-    const validated = bookmarkSchema.parse({ postId });
+    const validatedParams = toggleSaveFeedParamsSchema.parse(req.params);
 
     // Check target post
     const postData = await prisma.post.findUnique({
       where: {
-        id: validated.postId,
+        id: validatedParams.postId,
       },
     });
 
@@ -32,7 +29,7 @@ export const toggleSaveFeed = async (req, res) => {
       where: {
         userId_postId: {
           userId: currentUserId,
-          postId: validated.postId,
+          postId: validatedParams.postId,
         },
       },
     });
@@ -43,7 +40,7 @@ export const toggleSaveFeed = async (req, res) => {
         where: {
           userId_postId: {
             userId: currentUserId,
-            postId: validated.postId,
+            postId: validatedParams.postId,
           },
         },
       });
@@ -52,20 +49,20 @@ export const toggleSaveFeed = async (req, res) => {
     }
 
     // Bookmark
-    const newBookmark = await prisma.bookmark.create({
+    const createdBookmark = await prisma.bookmark.create({
       data: {
         userId: currentUserId,
-        postId: validated.postId,
+        postId: validatedParams.postId,
       },
     });
 
     return res
       .status(200)
-      .json({ message: "Berhasil save feed/post.", data: newBookmark });
+      .json({ message: "Berhasil save feed/post.", data: createdBookmark });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -80,20 +77,17 @@ export const checkSavedFeed = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get post ID
-    const postId = Number(req.params.postId);
-
     // Validate request params
-    const bookmarkSchema = z.object({
-      postId: z.number().int().positive(),
+    const checkSavedFeedParamsSchema = z.object({
+      postId: z.coerce.number().int().positive("Post ID harus valid."),
     });
 
-    const validated = bookmarkSchema.parse({ postId });
+    const validatedParams = checkSavedFeedParamsSchema.parse(req.params);
 
     // Check target post
     const postData = await prisma.post.findUnique({
       where: {
-        id: validated.postId,
+        id: validatedParams.postId,
       },
     });
 
@@ -102,25 +96,23 @@ export const checkSavedFeed = async (req, res) => {
     }
 
     // Check bookmark status
-    const checkSaved = await prisma.bookmark.findUnique({
+    const existingBookmark = await prisma.bookmark.findUnique({
       where: {
         userId_postId: {
           userId: currentUserId,
-          postId: validated.postId,
+          postId: validatedParams.postId,
         },
       },
     });
 
     // Send response
-    if (checkSaved) {
-      return res.status(200).json({ data: true });
-    }
-
-    return res.status(200).json({ data: false });
+    return res.status(200).json({
+      data: Boolean(existingBookmark),
+    });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 

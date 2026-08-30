@@ -9,11 +9,8 @@ export const createFeed = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get body request
-    const { caption } = req.body;
-
     // Validate request body
-    const bodySchema = z.object({
+    const createFeedBodySchema = z.object({
       caption: z
         .string()
         .trim()
@@ -21,7 +18,7 @@ export const createFeed = async (req, res) => {
         .max(500, "Caption maksimal 500 karakter."),
     });
 
-    const validated = bodySchema.parse({ caption });
+    const validatedBody = createFeedBodySchema.parse(req.body);
 
     // Validate upload file
     if (!req.file) {
@@ -47,17 +44,17 @@ export const createFeed = async (req, res) => {
     });
 
     // Create post and update user's post count
-    const newFeed = await prisma.$transaction(async (tx) => {
-      const post = await tx.post.create({
+    const createdFeed = await prisma.$transaction(async (tx) => {
+      const createdFeed = await tx.post.create({
         data: {
-          caption: validated.caption,
+          caption: validatedBody.caption,
           image: uploadedImage.secure_url,
           imageId: uploadedImage.public_id,
           userId: currentUserId,
         },
       });
 
-      // Update data user
+      // Update user's post count
       await tx.user.update({
         where: {
           id: currentUserId,
@@ -67,25 +64,26 @@ export const createFeed = async (req, res) => {
         },
       });
 
-      return post;
+      return createdFeed;
     });
 
     return res
       .status(201)
-      .json({ message: "Feed berhasil dibuat.", data: newFeed });
+      .json({ message: "Feed berhasil dibuat.", data: createdFeed });
   } catch (err) {
-    // Zod error
-    if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
-      return res.status(400).json({ message: errors });
-    }
-
+    // Rollback Cloudinary  upload
     if (uploadedImage?.public_id) {
       try {
         await cloudinary.uploader.destroy(uploadedImage.public_id);
       } catch (cloudinaryError) {
         console.error("Failed to rollback Cloudinary upload:", cloudinaryError);
       }
+    }
+
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((issue) => issue.message);
+      return res.status(400).json({ message: errors });
     }
 
     // Unexpected error
@@ -99,20 +97,18 @@ export const readAllFeed = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get query params
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 3;
-
-    // Validate pagination
-    const paginationSchema = z.object({
-      page: z.number().int().positive(),
-      limit: z.number().int().positive().max(50),
+    // Validate request query
+    const readAllFeedQuerySchema = z.object({
+      page: z.coerce.number().int().positive("Page harus valid.").default(1),
+      limit: z.coerce
+        .number()
+        .int()
+        .positive("Limit harus valid.")
+        .max(50, "Limit maksimal 50.")
+        .default(3),
     });
 
-    const validated = paginationSchema.parse({
-      page,
-      limit,
-    });
+    const validatedQuery = readAllFeedQuerySchema.parse(req.query);
 
     // Get users that current user follows
     const followings = await prisma.follow.findMany({
@@ -120,20 +116,23 @@ export const readAllFeed = async (req, res) => {
       select: { followingId: true },
     });
 
-    const followingIds = followings.map((f) => f.followingId);
+    const followingIds = followings.map((follow) => follow.followingId);
+
+    // Get feed user IDs
+    const feedUserIds = [...followingIds, currentUserId];
 
     // Calculate pagination
-    const skip = (validated.page - 1) * validated.limit;
+    const skip = (validatedQuery.page - 1) * validatedQuery.limit;
 
     // Get total feed count
     const totalFeed = await prisma.post.count({
-      where: { userId: { in: [...followingIds, currentUserId] } },
+      where: { userId: { in: feedUserIds } },
     });
 
-    // Get post
+    // Get posts
     const posts = await prisma.post.findMany({
       where: {
-        userId: { in: [...followingIds, currentUserId] },
+        userId: { in: feedUserIds },
       },
       include: {
         user: {
@@ -147,24 +146,24 @@ export const readAllFeed = async (req, res) => {
       },
       orderBy: { createdAt: "desc" },
       skip: skip,
-      take: validated.limit,
+      take: validatedQuery.limit,
     });
 
     // Calculate total pages
-    const totalPage = Math.ceil(totalFeed / validated.limit);
+    const totalPages = Math.ceil(totalFeed / validatedQuery.limit);
 
     return res.status(200).json({
       message: "Get all posts.",
-      page: validated.page,
-      limit: validated.limit,
-      totalPage,
+      page: validatedQuery.page,
+      limit: validatedQuery.limit,
+      totalPages,
       totalFeed,
       data: posts,
     });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -176,12 +175,16 @@ export const readAllFeed = async (req, res) => {
 
 export const detailFeed = async (req, res) => {
   try {
-    // Get post ID
-    const postId = Number(req.params.id);
+    // Validate request params
+    const detailFeedParamsSchema = z.object({
+      id: z.coerce.number().int().positive("Post ID harus valid."),
+    });
+
+    const validatedParams = detailFeedParamsSchema.parse(req.params);
 
     // Get post detail
     const post = await prisma.post.findUnique({
-      where: { id: postId },
+      where: { id: validatedParams.id },
       include: {
         user: {
           select: {
@@ -216,6 +219,12 @@ export const detailFeed = async (req, res) => {
 
     return res.status(200).json({ message: "Get detail feed.", data: post });
   } catch (err) {
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((issue) => issue.message);
+      return res.status(400).json({ message: errors });
+    }
+
     // Unexpected error
     console.error(err);
     return res.status(500).json({ message: "Internal server error." });
@@ -224,13 +233,20 @@ export const detailFeed = async (req, res) => {
 
 export const deleteFeed = async (req, res) => {
   try {
-    // Get post ID
-    const postId = Number(req.params.id);
+    // Get current user ID
+    const currentUserId = req.user.id;
+
+    // Validate request params
+    const deleteFeedParamsSchema = z.object({
+      id: z.coerce.number().int().positive("Post ID harus valid."),
+    });
+
+    const validatedParams = deleteFeedParamsSchema.parse(req.params);
 
     // Get post data
     const postData = await prisma.post.findUnique({
       where: {
-        id: postId,
+        id: validatedParams.id,
       },
     });
 
@@ -238,8 +254,8 @@ export const deleteFeed = async (req, res) => {
       return res.status(404).json({ message: "Post tidak ditemukan." });
     }
 
-    // Check post Ownership
-    if (postData.userId !== req.user.id) {
+    // Check post ownership
+    if (postData.userId !== currentUserId) {
       return res
         .status(403)
         .json({ message: "Anda tidak bisa menghapus feed user lain." });
@@ -255,7 +271,7 @@ export const deleteFeed = async (req, res) => {
 
       await tx.user.update({
         where: {
-          id: postData.userId,
+          id: currentUserId,
         },
         data: {
           postCount: {
@@ -277,8 +293,15 @@ export const deleteFeed = async (req, res) => {
       }
     }
 
+    // Send response success
     return res.status(200).json({ message: "Post berhasil dihapus." });
   } catch (err) {
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((issue) => issue.message);
+      return res.status(400).json({ message: errors });
+    }
+
     // Unexpected error
     console.error(err);
     return res.status(500).json({ message: "Internal server error." });

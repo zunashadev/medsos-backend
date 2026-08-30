@@ -6,20 +6,17 @@ export const likeFeedUser = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get post ID
-    const postId = Number(req.params.postId);
-
     // Validate request params
-    const likeSchema = z.object({
-      postId: z.number().int().positive(),
+    const likeFeedUserParamsSchema = z.object({
+      postId: z.coerce.number().int().positive("Post ID harus valid."),
     });
 
-    const validated = likeSchema.parse({ postId });
+    const validatedParams = likeFeedUserParamsSchema.parse(req.params);
 
     // Check target post
     const postData = await prisma.post.findUnique({
       where: {
-        id: validated.postId,
+        id: validatedParams.postId,
       },
     });
 
@@ -32,7 +29,7 @@ export const likeFeedUser = async (req, res) => {
       where: {
         userId_postId: {
           userId: currentUserId,
-          postId: validated.postId,
+          postId: validatedParams.postId,
         },
       },
     });
@@ -45,7 +42,7 @@ export const likeFeedUser = async (req, res) => {
           where: {
             userId_postId: {
               userId: currentUserId,
-              postId: validated.postId,
+              postId: validatedParams.postId,
             },
           },
         });
@@ -53,7 +50,7 @@ export const likeFeedUser = async (req, res) => {
         // Update like count
         await tx.post.update({
           where: {
-            id: validated.postId,
+            id: validatedParams.postId,
           },
           data: {
             likeCount: { decrement: 1 },
@@ -66,36 +63,36 @@ export const likeFeedUser = async (req, res) => {
     }
 
     // Like transaction
-    const newLike = await prisma.$transaction(async (tx) => {
+    const createdLike = await prisma.$transaction(async (tx) => {
       // Create like
-      const newLike = await tx.like.create({
+      const createdLike = await tx.like.create({
         data: {
           userId: currentUserId,
-          postId: validated.postId,
+          postId: validatedParams.postId,
         },
       });
 
       // Update post like count
       await tx.post.update({
         where: {
-          id: validated.postId,
+          id: validatedParams.postId,
         },
         data: {
           likeCount: { increment: 1 },
         },
       });
 
-      return newLike;
+      return createdLike;
     });
 
     // Send response success - like
     return res
       .status(201)
-      .json({ message: "Like post/feed berhasil.", data: newLike });
+      .json({ message: "Like post/feed berhasil.", data: createdLike });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -110,20 +107,17 @@ export const checkLikeUser = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get post ID
-    const postId = Number(req.params.postId);
-
     // Validate request params
-    const likeSchema = z.object({
-      postId: z.number().int().positive(),
+    const checkLikeUserParamsSchema = z.object({
+      postId: z.coerce.number().int().positive("Post ID harus valid."),
     });
 
-    const validated = likeSchema.parse({ postId });
+    const validatedParams = checkLikeUserParamsSchema.parse(req.params);
 
     // Check target post
     const postData = await prisma.post.findUnique({
       where: {
-        id: validated.postId,
+        id: validatedParams.postId,
       },
     });
 
@@ -136,22 +130,19 @@ export const checkLikeUser = async (req, res) => {
       where: {
         userId_postId: {
           userId: currentUserId,
-          postId: validated.postId,
+          postId: validatedParams.postId,
         },
       },
     });
 
-    // Send response - true
-    if (existingLike) {
-      return res.status(200).json({ data: true });
-    }
-
-    // Send response - false
-    return res.status(200).json({ data: false });
+    // Send response
+    return res.status(200).json({
+      data: Boolean(existingLike),
+    });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 

@@ -6,18 +6,15 @@ export const followUserAccount = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get follow user ID
-    const followUserId = Number(req.params.userId);
-
     // Validate request params
-    const followSchema = z.object({
-      followUserId: z.number().int().positive(),
+    const followUserAccountParamsSchema = z.object({
+      userId: z.coerce.number().int().positive("User ID harus valid."),
     });
 
-    const validated = followSchema.parse({ followUserId });
+    const validatedParams = followUserAccountParamsSchema.parse(req.params);
 
     // Check if current user follows themselves
-    if (currentUserId === validated.followUserId) {
+    if (currentUserId === validatedParams.userId) {
       return res
         .status(400)
         .json({ message: "Tidak bisa follow akun sendiri." });
@@ -26,7 +23,7 @@ export const followUserAccount = async (req, res) => {
     // Check target user
     const targetUser = await prisma.user.findUnique({
       where: {
-        id: validated.followUserId,
+        id: validatedParams.userId,
       },
     });
 
@@ -34,27 +31,27 @@ export const followUserAccount = async (req, res) => {
       return res.status(404).json({ message: "User tidak ditemukan." });
     }
 
-    // Check existing folow
+    // Check existing follow
     const existingFollow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
           followerId: currentUserId,
-          followingId: validated.followUserId,
+          followingId: validatedParams.userId,
         },
       },
     });
 
     if (existingFollow) {
-      return res.status(400).json({ message: "User sudah pernah di-follow." });
+      return res.status(409).json({ message: "User sudah di-follow." });
     }
 
     // Follow Transaction
-    const follow = await prisma.$transaction(async (tx) => {
+    const createdFollow = await prisma.$transaction(async (tx) => {
       // Create follow
-      const follow = await tx.follow.create({
+      const createdFollow = await tx.follow.create({
         data: {
           followerId: currentUserId,
-          followingId: validated.followUserId,
+          followingId: validatedParams.userId,
         },
       });
 
@@ -73,7 +70,7 @@ export const followUserAccount = async (req, res) => {
       // Update target user's follower count
       await tx.user.update({
         where: {
-          id: validated.followUserId,
+          id: validatedParams.userId,
         },
         data: {
           followerCount: {
@@ -82,17 +79,17 @@ export const followUserAccount = async (req, res) => {
         },
       });
 
-      return follow;
+      return createdFollow;
     });
 
     // Send response success
     return res
       .status(201)
-      .json({ message: "Follow user berhasil.", data: follow });
+      .json({ message: "Follow user berhasil.", data: createdFollow });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -107,20 +104,17 @@ export const unfollowUserAccount = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get unfollow user ID
-    const unfollowUserId = Number(req.params.userId);
-
     // Validate request params
-    const unfollowSchema = z.object({
-      unfollowUserId: z.number().int().positive(),
+    const unfollowUserAccountParamsSchema = z.object({
+      userId: z.coerce.number().int().positive("User ID harus valid."),
     });
 
-    const validated = unfollowSchema.parse({ unfollowUserId });
+    const validatedParams = unfollowUserAccountParamsSchema.parse(req.params);
 
     // Check target user
     const targetUser = await prisma.user.findUnique({
       where: {
-        id: validated.unfollowUserId,
+        id: validatedParams.userId,
       },
     });
 
@@ -135,25 +129,25 @@ export const unfollowUserAccount = async (req, res) => {
       where: {
         followerId_followingId: {
           followerId: currentUserId,
-          followingId: validated.unfollowUserId,
+          followingId: validatedParams.userId,
         },
       },
     });
 
     if (!existingFollow) {
-      return res.status(400).json({
+      return res.status(409).json({
         message: "User belum di-follow.",
       });
     }
 
-    // Delete Transaction
+    // Unfollow Transaction
     await prisma.$transaction(async (tx) => {
       // Delete follow
       await tx.follow.delete({
         where: {
           followerId_followingId: {
             followerId: currentUserId,
-            followingId: validated.unfollowUserId,
+            followingId: validatedParams.userId,
           },
         },
       });
@@ -173,7 +167,7 @@ export const unfollowUserAccount = async (req, res) => {
       // Update target user's follower count
       await tx.user.update({
         where: {
-          id: validated.unfollowUserId,
+          id: validatedParams.userId,
         },
         data: {
           followerCount: {
@@ -188,7 +182,7 @@ export const unfollowUserAccount = async (req, res) => {
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -204,18 +198,18 @@ export const getSuggestedUsers = async (req, res) => {
     const currentUserId = req.user.id;
 
     // Get list of followed user IDs
-    const followedUser = await prisma.follow.findMany({
+    const followedUsers = await prisma.follow.findMany({
       where: { followerId: currentUserId },
       select: { followingId: true },
     });
 
-    const followedIds = followedUser.map((f) => f.followingId);
+    const followedUserIds = followedUsers.map((follow) => follow.followingId);
 
     // Fetch recommended users (exclude current user and already followed)
-    const users = await prisma.user.findMany({
+    const suggestedUsers = await prisma.user.findMany({
       where: {
         id: {
-          notIn: [...followedIds, currentUserId],
+          notIn: [...followedUserIds, currentUserId],
         },
       },
       select: {
@@ -232,8 +226,8 @@ export const getSuggestedUsers = async (req, res) => {
 
     // Send response success
     return res.status(200).json({
-      message: `${users.length} user yang belum di-follow`,
-      data: users,
+      message: `${suggestedUsers.length} user yang belum di-follow.`,
+      data: suggestedUsers,
     });
   } catch (err) {
     // Unexpected error
@@ -247,37 +241,45 @@ export const isFollowUser = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get target user ID
-    const targetUserId = Number(req.params.userId);
+    // Validate request params
+    const isFollowUserParamsSchema = z.object({
+      userId: z.coerce.number().int().positive("User ID harus valid."),
+    });
+
+    const validatedParams = isFollowUserParamsSchema.parse(req.params);
 
     // Check target user
-    const checkFollowUserId = await prisma.user.findUnique({
+    const targetUser = await prisma.user.findUnique({
       where: {
-        id: targetUserId,
+        id: validatedParams.userId,
       },
     });
 
-    if (!checkFollowUserId) {
+    if (!targetUser) {
       return res.status(404).json({ message: "User tidak ditemukan." });
     }
 
     // Check follow status
-    const isFollowUserData = await prisma.follow.findUnique({
+    const existingFollow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
           followerId: currentUserId,
-          followingId: targetUserId,
+          followingId: validatedParams.userId,
         },
       },
     });
 
     // Send response
-    if (isFollowUserData) {
-      return res.status(200).json({ data: true });
+    return res.status(200).json({
+      data: Boolean(existingFollow),
+    });
+  } catch (err) {
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((issue) => issue.message);
+      return res.status(400).json({ message: errors });
     }
 
-    return res.status(200).json({ data: false });
-  } catch (err) {
     // Unexpected error
     console.error(err);
     return res.status(500).json({ message: "Internal server error." });

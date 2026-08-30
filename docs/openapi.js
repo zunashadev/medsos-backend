@@ -107,11 +107,15 @@ const openapiSpecification = {
           },
 
           400: {
-            description: "Invalid request.",
+            description: "Cannot follow your own account or invalid request parameter.",
           },
 
           404: {
             description: "User not found.",
+          },
+
+          409: {
+            description: "User has already been followed.",
           },
 
           500: {
@@ -156,11 +160,15 @@ const openapiSpecification = {
           },
 
           400: {
-            description: "User has not been followed.",
+            description: "Validation error (invalid request parameter).",
           },
 
           404: {
             description: "User not found.",
+          },
+
+          409: {
+            description: "User has not been followed.",
           },
 
           500: {
@@ -203,6 +211,10 @@ const openapiSpecification = {
         responses: {
           200: {
             description: "Follow status retrieved successfully.",
+          },
+
+          400: {
+            description: "Validation error (invalid request parameter).",
           },
 
           404: {
@@ -257,6 +269,10 @@ const openapiSpecification = {
             description: "Post unliked successfully.",
           },
 
+          400: {
+            description: "Validation error (invalid request parameter).",
+          },
+
           404: {
             description: "Post not found.",
           },
@@ -300,6 +316,10 @@ const openapiSpecification = {
         responses: {
           200: {
             description: "Like status retrieved successfully.",
+          },
+
+          400: {
+            description: "Validation error (invalid request parameter).",
           },
 
           404: {
@@ -355,6 +375,10 @@ const openapiSpecification = {
             description: "Bookmark status changed successfully.",
           },
 
+          400: {
+            description: "Validation error (invalid request parameter).",
+          },
+
           404: {
             description: "Post not found.",
             content: {
@@ -405,6 +429,10 @@ const openapiSpecification = {
         responses: {
           200: {
             description: "Bookmark status retrieved successfully.",
+          },
+
+          400: {
+            description: "Validation error (invalid request parameter).",
           },
 
           404: {
@@ -711,6 +739,10 @@ const openapiSpecification = {
             description: "Post detail retrieved successfully.",
           },
 
+          400: {
+            description: "Validation error (invalid request parameter).",
+          },
+
           404: {
             description: "Post not found.",
           },
@@ -755,6 +787,10 @@ const openapiSpecification = {
         responses: {
           200: {
             description: "Post deleted successfully.",
+          },
+
+          400: {
+            description: "Validation error (invalid request parameter).",
           },
 
           403: {
@@ -1080,7 +1116,11 @@ const openapiSpecification = {
           },
 
           400: {
-            description: "Validation error or username already taken.",
+            description: "Validation error (invalid request body).",
+          },
+
+          409: {
+            description: "Username already taken.",
           },
 
           500: {

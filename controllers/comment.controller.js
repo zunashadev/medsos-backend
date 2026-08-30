@@ -6,22 +6,22 @@ export const createComment = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get post ID & content
-    const postId = Number(req.body.postId);
-    const content = req.body.content;
-
     // Validate request body
-    const commentSchema = z.object({
-      postId: z.number().int().positive(),
-      content: z.string().trim().min(1).max(255),
+    const createCommentBodySchema = z.object({
+      postId: z.coerce.number().int().positive("Post ID harus valid."),
+      content: z
+        .string()
+        .trim()
+        .min(1, "Komentar tidak boleh kosong.")
+        .max(255, "Komentar maksimal 255 karakter."),
     });
 
-    const validated = commentSchema.parse({ postId, content });
+    const validatedBody = createCommentBodySchema.parse(req.body);
 
     // Check target post
     const targetPost = await prisma.post.findUnique({
       where: {
-        id: validated.postId,
+        id: validatedBody.postId,
       },
     });
 
@@ -30,37 +30,37 @@ export const createComment = async (req, res) => {
     }
 
     // Create comment transaction
-    const newComment = await prisma.$transaction(async (tx) => {
+    const createdComment = await prisma.$transaction(async (tx) => {
       // Create comment
-      const newComment = await tx.comment.create({
+      const createdComment = await tx.comment.create({
         data: {
           userId: currentUserId,
-          postId: validated.postId,
-          content: validated.content,
+          postId: validatedBody.postId,
+          content: validatedBody.content,
         },
       });
 
       // Update post comment count
       await tx.post.update({
         where: {
-          id: validated.postId,
+          id: validatedBody.postId,
         },
         data: {
           commentCount: { increment: 1 },
         },
       });
 
-      return newComment;
+      return createdComment;
     });
 
     // Send response success
     return res
       .status(201)
-      .json({ message: "Comment berhasil.", data: newComment });
+      .json({ message: "Comment berhasil.", data: createdComment });
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
@@ -75,20 +75,17 @@ export const deleteCommentById = async (req, res) => {
     // Get current user ID
     const currentUserId = req.user.id;
 
-    // Get comment ID
-    const commentId = Number(req.params.id);
-
     // Validate request params
-    const commentSchema = z.object({
-      commentId: z.number().int().positive(),
+    const deleteCommentParamsSchema = z.object({
+      commentId: z.coerce.number().int().positive("Comment ID harus valid."),
     });
 
-    const validated = commentSchema.parse({ commentId });
+    const validatedParams = deleteCommentParamsSchema.parse(req.params);
 
     // Check target comment
     const targetComment = await prisma.comment.findUnique({
       where: {
-        id: validated.commentId,
+        id: validatedParams.commentId,
       },
     });
 
@@ -108,7 +105,7 @@ export const deleteCommentById = async (req, res) => {
       // Delete comment
       await tx.comment.delete({
         where: {
-          id: validated.commentId,
+          id: validatedParams.commentId,
         },
       });
 
@@ -128,7 +125,7 @@ export const deleteCommentById = async (req, res) => {
   } catch (err) {
     // Zod error
     if (err instanceof z.ZodError) {
-      const errors = err.issues.map((i) => i.message);
+      const errors = err.issues.map((issue) => issue.message);
       return res.status(400).json({ message: errors });
     }
 
