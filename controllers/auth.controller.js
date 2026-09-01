@@ -153,6 +153,7 @@ export const LoginUser = async (req, res) => {
         fullname: existingUserByEmail.fullname,
         username: existingUserByEmail.username,
         email: existingUserByEmail.email,
+        role: existingUserByEmail.role,
         image: existingUserByEmail.image,
         bio: existingUserByEmail.bio,
       },

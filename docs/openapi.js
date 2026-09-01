@@ -517,7 +517,7 @@ const openapiSpecification = {
         },
       },
     },
-    "/api/comment/{id}": {
+    "/api/comment/{commentId}": {
       delete: {
         tags: ["Comment"],
 
@@ -533,7 +533,7 @@ const openapiSpecification = {
 
         parameters: [
           {
-            name: "id",
+            name: "commentId",
 
             in: "path",
 
@@ -1174,6 +1174,62 @@ const openapiSpecification = {
 
           400: {
             description: "No image file provided.",
+          },
+
+          404: {
+            description: "User not found.",
+          },
+
+          500: {
+            description: "Internal server error.",
+          },
+        },
+      },
+    },
+
+    "/api/user/{userId}": {
+      delete: {
+        tags: ["User"],
+
+        summary: "Delete a user (Admin only)",
+
+        description:
+          "Delete a user account and all associated data (posts, comments, likes, bookmarks, follows). Only accessible by users with the ADMIN role. Associated images will also be deleted from Cloudinary.",
+
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+
+        parameters: [
+          {
+            name: "userId",
+
+            in: "path",
+
+            required: true,
+
+            description: "ID of the user to delete",
+
+            schema: {
+              type: "integer",
+              example: 10,
+            },
+          },
+        ],
+
+        responses: {
+          200: {
+            description: "User deleted successfully.",
+          },
+
+          400: {
+            description: "Validation error (invalid request parameter).",
+          },
+
+          403: {
+            description: "Forbidden. Only ADMIN users can access this endpoint.",
           },
 
           404: {

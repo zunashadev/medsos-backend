@@ -261,3 +261,82 @@ export const updateAvatar = async (req, res) => {
     return res.status(500).json({ message: "Internal server error." });
   }
 };
+
+export const deleteUser = async (req, res) => {
+  try {
+    // Validate request params
+    const deleteUserParamsSchema = z.object({
+      userId: z.coerce.number().int().positive(),
+    });
+
+    const validatedParams = deleteUserParamsSchema.parse(req.params);
+
+    // Get user and all post image IDs
+    const user = await prisma.user.findUnique({
+      where: {
+        id: validatedParams.userId,
+      },
+      select: {
+        id: true,
+        imageId: true,
+        posts: {
+          select: {
+            imageId: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User tidak ditemukan.",
+      });
+    }
+
+    // Delete user avatar from Cloudinary
+    if (user.imageId) {
+      try {
+        await cloudinary.uploader.destroy(user.imageId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete user avatar from Cloudinary:",
+          cloudinaryError,
+        );
+      }
+    }
+
+    // Delete all user's post images from Cloudinary
+    for (const post of user.posts) {
+      try {
+        await cloudinary.uploader.destroy(post.imageId);
+      } catch (cloudinaryError) {
+        console.error(
+          `Failed to delete post image ${post.imageId} from Cloudinary:`,
+          cloudinaryError,
+        );
+      }
+    }
+
+    // Delete user from database
+    await prisma.user.delete({
+      where: {
+        id: user.id,
+      },
+    });
+
+    // Send success response
+    return res.status(200).json({
+      message: "User berhasil dihapus.",
+    });
+  } catch (err) {
+    // Zod error
+    if (err instanceof z.ZodError) {
+      const errors = err.issues.map((issue) => issue.message);
+      return res.status(400).json({ message: errors });
+    }
+
+    // Unexpected error
+    console.error(err);
+    return res.status(500).json({ message: "Internal server error." });
+  }
+};

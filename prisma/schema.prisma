@@ -12,76 +12,84 @@ datasource db {
   provider = "postgresql"
 }
 
-model User { 
-  id              Int         @id @default(autoincrement()) 
-  fullname        String      @db.VarChar(255)
-  email           String      @unique @db.VarChar(255)
-  username        String      @unique @db.VarChar(255)
-  password        String      @db.VarChar(255)
-  bio             String?     @db.Text
-  image           String?     @db.VarChar(255)
-  imageId         String?     @db.VarChar(255)
-  followingCount  Int         @db.Integer @default(0)
-  followerCount   Int         @db.Integer @default(0)
-  postCount       Int         @db.Integer @default(0)
-  createdAt       DateTime    @default(now())
-  posts           Post[]
-  comments        Comment[]
-  bookmarks       Bookmark[]
-  likes           Like[]
-  followers       Follow[]    @relation("Followers")
-  followings      Follow[]    @relation("Followings")
+enum Role {
+  USER
+  ADMIN
 }
 
-model Post { 
-  id              Int         @id @default(autoincrement()) 
-  userId          Int
-  user            User        @relation(fields: [userId], references: [id])
-  image           String      @db.VarChar(255)
-  imageId         String      @db.VarChar(255)
-  caption         String      @db.Text
-  commentCount    Int         @db.Integer @default(0)
-  likeCount       Int         @db.Integer @default(0)
-  createdAt       DateTime    @default(now())
-  comments        Comment[]
-  bookmarks       Bookmark[]
-  likes           Like[]
+model User {
+  id             Int        @id @default(autoincrement())
+  fullname       String     @db.VarChar(255)
+  email          String     @unique @db.VarChar(255)
+  username       String     @unique @db.VarChar(255)
+  password       String     @db.VarChar(255)
+  role           Role       @default(USER)
+  bio            String?    @db.Text
+  image          String?    @db.VarChar(255)
+  imageId        String?    @db.VarChar(255)
+  followingCount Int        @default(0) @db.Integer
+  followerCount  Int        @default(0) @db.Integer
+  postCount      Int        @default(0) @db.Integer
+  createdAt      DateTime   @default(now())
+  posts          Post[]
+  comments       Comment[]
+  bookmarks      Bookmark[]
+  likes          Like[]
+  followers      Follow[]   @relation("Followers")
+  followings     Follow[]   @relation("Followings")
 }
 
-model Comment { 
-  id              Int         @id @default(autoincrement()) 
-  userId          Int
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  postId          Int
-  post            Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
-  content         String      @db.Text
-  createdAt       DateTime    @default(now())
+model Post {
+  id           Int        @id @default(autoincrement())
+  userId       Int
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  image        String     @db.VarChar(255)
+  imageId      String     @db.VarChar(255)
+  caption      String     @db.Text
+  commentCount Int        @default(0) @db.Integer
+  likeCount    Int        @default(0) @db.Integer
+  createdAt    DateTime   @default(now())
+  comments     Comment[]
+  bookmarks    Bookmark[]
+  likes        Like[]
 }
 
-model Bookmark { 
-  userId          Int
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  postId          Int
-  post            Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
-  createdAt       DateTime    @default(now())
+model Comment {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    Int
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model Bookmark {
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    Int
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
   @@id([userId, postId])
 }
 
-model Like { 
-  userId          Int
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  postId          Int
-  post            Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
-  createdAt       DateTime    @default(now())
+model Like {
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    Int
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
   @@id([userId, postId])
 }
 
-model Follow { 
-  followerId      Int
-  follower        User        @relation("Followers", fields: [followerId], references: [id])
-  followingId     Int
-  following       User        @relation("Followings", fields: [followingId], references: [id])
-  createdAt       DateTime    @default(now())
+model Follow {
+  followerId  Int
+  follower    User     @relation("Followers", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId Int
+  following   User     @relation("Followings", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
   @@id([followerId, followingId])
 }
-

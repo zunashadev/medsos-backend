@@ -29,7 +29,11 @@ export const AuthMiddleware = async (req, res, next) => {
     const decoded = jwt.verify(token, jwtSecret);
 
     // Pastikan payload memiliki ID user
-    if (typeof decoded !== "object" || !decoded.id) {
+    if (
+      typeof decoded !== "object" ||
+      decoded === null ||
+      typeof decoded.id !== "number"
+    ) {
       return res.status(401).json({ message: "Invalid token." });
     }
 
@@ -43,6 +47,7 @@ export const AuthMiddleware = async (req, res, next) => {
         fullname: true,
         username: true,
         email: true,
+        role: true,
         image: true,
         bio: true,
       },
@@ -57,7 +62,7 @@ export const AuthMiddleware = async (req, res, next) => {
     // Menambah user ke req
     req.user = currentUser;
 
-    next();
+    return next();
   } catch (err) {
     // JWT invalid
     if (err instanceof jwt.JsonWebTokenError) {

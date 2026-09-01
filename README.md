@@ -25,6 +25,7 @@ Backend RESTful API untuk platform media sosial modern yang dibangun dengan **No
 - **Register & Login**: Hashing password menggunakan `bcrypt` dan pembuatan token `JWT`.
 - **User Verification**: Validasi data input ketat menggunakan `Zod`.
 - **Session Profile**: Endpoint `/api/auth/me` untuk mendapatkan data profil pengguna yang sedang login.
+- **Role-Based Access Control (RBAC)**: Sistem role `USER` dan `ADMIN` dengan middleware otorisasi untuk endpoint yang memerlukan hak akses khusus.
 
 ### 👤 2. Manajemen Pengguna (User)
 
@@ -32,6 +33,7 @@ Backend RESTful API untuk platform media sosial modern yang dibangun dengan **No
 - **Profil Pengguna**: Lihat detail akun, daftar postingan, dan daftar bookmark berdasarkan username.
 - **Update Profil**: Perbarui data nama lengkap, username, dan biodata.
 - **Foto Profil**: Upload dan ganti foto profil langsung terintegrasi dengan Cloudinary (otomatis menghapus foto lama).
+- **Hapus User (Admin)**: Admin dapat menghapus akun pengguna beserta seluruh data terkait (postingan, komentar, like, bookmark, follow) dan aset gambar di Cloudinary.
 
 ### 📸 3. Postingan (Feed)
 
@@ -76,6 +78,7 @@ Semua endpoint dilindungi oleh middleware autentikasi Bearer Token (JWT), kecual
 |              | `GET`    | `/api/user/:username`            | Mendapatkan detail profil user     |  ❌  |
 |              | `PUT`    | `/api/user/update-user`          | Update bio, fullname, username     |  ✅  |
 |              | `PUT`    | `/api/user/update-photo-profile` | Upload & ganti foto profil         |  ✅  |
+|              | `DELETE` | `/api/user/:userId`              | Hapus user (Admin only)            | 🔒 |
 | **Feed**     | `GET`    | `/api/feed?page=1&limit=3`       | Menampilkan postingan timeline     |  ✅  |
 |              | `POST`   | `/api/feed`                      | Membuat postingan baru (multipart) |  ✅  |
 |              | `GET`    | `/api/feed/:id`                  | Detail postingan & komentar        |  ✅  |
@@ -89,7 +92,7 @@ Semua endpoint dilindungi oleh middleware autentikasi Bearer Token (JWT), kecual
 | **Bookmark** | `POST`   | `/api/bookmark/:postId`          | Toggle Bookmark postingan          |  ✅  |
 |              | `GET`    | `/api/bookmark/:postId`          | Cek apakah post sudah di-bookmark  |  ✅  |
 | **Comment**  | `POST`   | `/api/comment`                   | Menambahkan komentar ke postingan  |  ✅  |
-|              | `DELETE` | `/api/comment/:id`               | Menghapus komentar                 |  ✅  |
+|              | `DELETE` | `/api/comment/:commentId`        | Menghapus komentar                 |  ✅  |
 
 ---
 
